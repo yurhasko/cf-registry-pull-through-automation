@@ -11,6 +11,7 @@ COMMIT_SHA=""
 CLOUDFLARE_API_TOKEN=""
 CF_ACCOUNT_ID=""
 CUSTOM_DOMAIN=""
+WORKERS_DEV_DOMAIN_ENABLED="true"
 R2_BUCKET="r2-pull-through-registry"
 R2_BUCKET_EXPIRE_BLOBS="30"
 R2_BUCKET_ABORT_MULTIPART="1"
@@ -26,20 +27,21 @@ UPSTREAM_REGISTRY="index.docker.io"
 print_help() {
   echo -e "${BLUE}Description:${NC} This script automates the creation and deployment of a Docker registry using Cloudflare Workers and R2."
   echo -e "${BLUE}Usage:${NC} $0 [OPTIONS]"
-  echo "  --commit-sha COMMIT                       Commit SHA to use for serverless-registry repo (optional)"
-  echo "  --cf-token TOKEN                          Cloudflare API Token (required)"
-  echo "  --cf-account-id CLOUDFLARE_ACCOUNT_ID     Cloudflare Account ID (required)"
-  echo "  --domain DOMAIN                           Custom domain (optional)"
-  echo "  --r2-bucket NAME                          R2 bucket name (optional, default: r2-pull-through-registry)"
-  echo "  --r2-bucket-expire-days DAYS              Number of days to expire blobs in R2 bucket (optional, default: 30)"
-  echo "  --r2-bucket-abort-multipart DAYS          Number of days to abort multipart uploads in R2 bucket (optional, default: 7)"
-  echo "  --r2-bucket-ia-transition DAYS            Number of days to transition blobs to Infrequent Access storage in R2 bucket (optional, default: 14)"
-  echo "  --username USER                           Registry username (optional)"
-  echo "  --password PASS                           Registry password (optional)"
-  echo "  --upstream-username UPSTREAM_USER         Upstream registry token (optional, required if deploying with an upstream registry)"
-  echo "  --upstream-password UPSTREAM_PASS         Upstream registry token (optional, required if deploying with an upstream registry)"
-  echo "  --upstream-registry UPSTREAM_REGISTRY     Upstream registry url (optional, default: index.docker.io)"
-  echo "  -h, --help                                Show help"
+  echo "  --commit-sha COMMIT                           Commit SHA to use for serverless-registry repo (optional)"
+  echo "  --cf-token TOKEN                              Cloudflare API Token (required)"
+  echo "  --cf-account-id CLOUDFLARE_ACCOUNT_ID         Cloudflare Account ID (required)"
+  echo "  --domain DOMAIN                               Custom domain (optional)"
+  echo "  --default-worker-domain-enabled [true|false]  Enable default worker domain (optional, default: true)"
+  echo "  --r2-bucket NAME                              R2 bucket name (optional, default: r2-pull-through-registry)"
+  echo "  --r2-bucket-expire-days DAYS                  Number of days to expire blobs in R2 bucket (optional, default: 30)"
+  echo "  --r2-bucket-abort-multipart DAYS              Number of days to abort multipart uploads in R2 bucket (optional, default: 7)"
+  echo "  --r2-bucket-ia-transition DAYS                Number of days to transition blobs to Infrequent Access storage in R2 bucket (optional, default: 14)"
+  echo "  --username USER                               Registry username (optional)"
+  echo "  --password PASS                               Registry password (optional)"
+  echo "  --upstream-username UPSTREAM_USER             Upstream registry token (optional, required if deploying with an upstream registry)"
+  echo "  --upstream-password UPSTREAM_PASS             Upstream registry token (optional, required if deploying with an upstream registry)"
+  echo "  --upstream-registry UPSTREAM_REGISTRY         Upstream registry url (optional, default: index.docker.io)"
+  echo "  -h, --help                                    Show help"
   echo
   exit 0
 }
@@ -61,6 +63,10 @@ parse_arguments() {
         ;;
       --domain)
         CUSTOM_DOMAIN="$2"
+        shift 2
+        ;;
+      --default-worker-domain-enabled)
+        WORKERS_DEV_DOMAIN_ENABLED="$2"
         shift 2
         ;;
       --r2-bucket)
@@ -108,6 +114,11 @@ parse_arguments() {
         ;;
     esac
   done
+
+  if [ -z "$CUSTOM_DOMAIN" ] && [ "$WORKERS_DEV_DOMAIN_ENABLED" = "false" ]; then
+    echo -e "${RED}Error: default worker domain can't be disabled if no custom domain is provided.${NC}"
+    exit 1
+  fi
 }
 
 setup_repo() {
@@ -220,7 +231,7 @@ EOF
   cat >>"$wrangler_toml" <<EOF
 name = "r2-registry"
 
-workers_dev = true
+workers_dev = ${WORKERS_DEV_DOMAIN_ENABLED}
 main = "./index.ts"
 compatibility_date = "2024-12-30"
 compatibility_flags = ["nodejs_compat"]
